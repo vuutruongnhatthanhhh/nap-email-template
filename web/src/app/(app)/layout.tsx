@@ -9,14 +9,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [email, setEmail] = useState<string | null | undefined>(undefined);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
+    async function loadProfile(userId: string) {
+      const { data: profile } = await supabase.from("profiles").select("is_admin").eq("id", userId).single();
+      setIsAdmin(!!profile?.is_admin);
+    }
+
     supabase.auth.getSession().then(({ data }) => {
       if (!data.session) {
         router.replace("/login");
         return;
       }
       setEmail(data.session.user.email ?? null);
+      loadProfile(data.session.user.id);
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!session) {
@@ -24,6 +31,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         return;
       }
       setEmail(session.user.email ?? null);
+      loadProfile(session.user.id);
     });
     return () => sub.subscription.unsubscribe();
   }, [router]);
@@ -35,6 +43,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const tabs = [
     { href: "/templates", label: "Templates" },
     { href: "/recipients", label: "Người nhận" },
+    { href: "/snippets", label: "Mẫu phản hồi" },
+    ...(isAdmin ? [{ href: "/admin", label: "Admin" }] : []),
   ];
 
   return (

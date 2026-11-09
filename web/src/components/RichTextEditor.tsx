@@ -1,9 +1,8 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import Underline from "@tiptap/extension-underline";
 import { TextStyle } from "@tiptap/extension-text-style";
 import { Color } from "@tiptap/extension-color";
 import FontFamily from "@tiptap/extension-font-family";
@@ -32,7 +31,6 @@ export default function RichTextEditor({
   const editor = useEditor({
     extensions: [
       StarterKit,
-      Underline,
       TextStyle,
       Color,
       FontFamily,
@@ -48,6 +46,27 @@ export default function RichTextEditor({
       },
     },
   });
+
+  // useEditor only reads `content` at creation — without this, external
+  // updates to `value` (e.g. AI-generated content replacing the draft)
+  // never show up, since the editor otherwise only pushes changes outward
+  // via onUpdate, never pulls them back in. Skip the no-op case (editor's
+  // own onUpdate just set this same value) so the cursor doesn't jump.
+  //
+  // emitUpdate: false is required here — without it, this programmatic
+  // setContent() re-fires onUpdate → onChange(editor.getHTML()), which
+  // overwrites the caller's raw value with ProseMirror's reserialized HTML.
+  // During AI streaming that stomps on the next chunk the caller appends
+  // (it appends to its own last-sent value, not the reserialized one),
+  // producing corrupted HTML like a stray "<p>" literal text mid-document —
+  // exactly the bug reported when streaming AI-generated content in.
+  useEffect(() => {
+    if (!editor) return;
+    if (value !== editor.getHTML()) {
+      editor.commands.setContent(value, { emitUpdate: false });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, editor]);
 
   async function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];

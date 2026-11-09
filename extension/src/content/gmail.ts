@@ -2,11 +2,14 @@
 // each open compose window's Subject field; clicking it opens a panel to
 // pick a recipient (single autofill) or a template + multiple recipients
 // (batch autofill into Bcc, so recipients never see each other's address).
-import type { Template, Recipient } from "@/lib/types";
+import type { Template, Recipient, ReplySnippet } from "@/lib/types";
 import { fillPlaceholders } from "@shared/placeholders";
 import {
   findComposeDialogs,
+  findReplyBodies,
   getSubjectInput,
+  getBodyEditable,
+  insertSnippetHtml,
   fillRecipients,
   fillSubject,
   fillBody,
@@ -16,6 +19,7 @@ import {
 } from "./selectors";
 
 const injected = new WeakSet<HTMLElement>();
+const replyInjected = new WeakSet<HTMLElement>();
 const LOGO_URL = chrome.runtime.getURL("icons/icon48.png");
 
 // "Gửi từng người" state: fill (never auto-send) one recipient per compose
@@ -30,11 +34,30 @@ interface SendQueue {
 }
 let activeQueue: SendQueue | null = null;
 
+// Untrusted DOM DragEvents don't work on Gmail (confirmed: file never
+// shows up even though the data pipeline itself is correct) — only a
+// debugger-dispatched (genuinely trusted) drag event has a chance, and
+// that has to run from the background service worker (chrome.debugger
+// isn't available to content scripts). The content script just supplies
+// the drop coordinates.
+async function attachFilesDebugger(dialog: HTMLElement, templateId: string) {
+  const target = getBodyEditable(dialog) ?? dialog;
+  const r = target.getBoundingClientRect();
+  const res = await safeSendMessage<{ ok: boolean; error?: string }>({
+    type: "ATTACH_FILES_DEBUGGER",
+    templateId,
+    x: r.left + r.width / 2,
+    y: r.top + r.height / 2,
+  });
+  return res?.ok ?? false;
+}
+
 async function fillForRecipient(dialog: HTMLElement, recipient: Recipient, template: Template) {
   const toOk = await fillRecipients(dialog, "To", [recipient.email]);
   const subjectOk = fillSubject(dialog, fillPlaceholders(template.subject, recipient));
   const bodyOk = fillBody(dialog, fillPlaceholders(template.body_html, recipient));
-  return { toOk, subjectOk, bodyOk };
+  const attachOk = await attachFilesDebugger(dialog, template.id);
+  return { toOk, subjectOk, bodyOk, attachOk };
 }
 
 // Floating, independent progress card for the fully-automated send-all run
@@ -511,8 +534,146 @@ function renderBatchTab(
   });
 }
 
+// Reply boxes (replying within a thread) get their own, simpler icon —
+// just a search/list of reply snippets, inserted at the cursor position in
+// the reply body. No subject/recipient fields exist here to fill.
+function injectReplyIcon(body: HTMLElement) {
+  if (replyInjected.has(body)) return;
+  replyInjected.add(body);
+
+  const iconHost = document.createElement("div");
+  Object.assign(iconHost.style, {
+    position: "fixed",
+    zIndex: "2147483646",
+    width: "26px",
+    height: "26px",
+    pointerEvents: "auto",
+  });
+  const iconRoot = iconHost.attachShadow({ mode: "open" });
+  iconRoot.innerHTML = `
+<style>
+:host{display:block}
+button{all:unset;width:26px;height:26px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;background:#fff;border:1px solid #dadce0;box-shadow:0 1px 3px rgba(0,0,0,.15)}
+button:hover{background:#f1f3f4}
+img{width:16px;height:16px}
+</style>
+<button title="Chèn mẫu phản hồi"><img src="${LOGO_URL}" alt="" /></button>`;
+
+  const panelHost = document.createElement("div");
+  Object.assign(panelHost.style, { position: "fixed", zIndex: "2147483647", display: "none" });
+  document.body.appendChild(iconHost);
+  document.body.appendChild(panelHost);
+
+  function posIcon() {
+    if (!document.contains(body)) {
+      iconHost.remove();
+      panelHost.remove();
+      return;
+    }
+    const r = body.getBoundingClientRect();
+    iconHost.style.top = `${Math.max(4, r.top - 30)}px`;
+    iconHost.style.left = `${Math.max(4, r.right - 30)}px`;
+  }
+  window.addEventListener("scroll", posIcon, { passive: true, capture: true });
+  window.addEventListener("resize", posIcon, { passive: true });
+  posIcon();
+
+  let panelOpen = false;
+  function closePanel() {
+    panelOpen = false;
+    panelHost.style.display = "none";
+  }
+  function openPanel() {
+    panelOpen = true;
+    panelHost.style.display = "block";
+    const r = body.getBoundingClientRect();
+    panelHost.style.top = `${Math.max(4, r.top - 6)}px`;
+    panelHost.style.left = `${Math.max(4, r.right - 300)}px`;
+    renderSnippetPanel(panelHost, body, closePanel);
+  }
+
+  iconRoot.querySelector("button")!.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    panelOpen ? closePanel() : openPanel();
+  });
+
+  document.addEventListener(
+    "click",
+    (e) => {
+      if (!panelOpen) return;
+      if (!e.composedPath().includes(iconHost) && !e.composedPath().includes(panelHost)) {
+        closePanel();
+      }
+    },
+    true,
+  );
+}
+
+function renderSnippetPanel(host: HTMLElement, body: HTMLElement, close: () => void) {
+  const root = host.shadowRoot ?? host.attachShadow({ mode: "open" });
+  root.innerHTML = `
+<style>
+:host{display:block}
+.panel{width:300px;max-height:360px;display:flex;flex-direction:column;background:#fff;border:1px solid #dadce0;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);font-family:Arial,sans-serif;overflow:hidden}
+.body{flex:1;overflow-y:auto;padding:8px}
+.search{width:100%;box-sizing:border-box;border:1px solid #dadce0;border-radius:6px;padding:6px 8px;font-size:12px;margin-bottom:8px;outline:none}
+.search:focus{border-color:#1a73e8}
+.item{padding:8px 9px;border-radius:6px;cursor:pointer}
+.item:hover{background:#f1f3f4}
+.name{font-size:12px;font-weight:600;color:#202124}
+.preview{font-size:11px;color:#5f6368;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.none{font-size:11px;color:#9aa0a6;padding:12px 4px;text-align:center}
+</style>
+<div class="panel">
+  <div class="body">
+    <input class="search" placeholder="Tìm mẫu phản hồi…" />
+    <div class="list"><div class="none">Đang tải…</div></div>
+  </div>
+</div>`;
+
+  const searchEl = root.querySelector<HTMLInputElement>(".search")!;
+  const listEl = root.querySelector<HTMLElement>(".list")!;
+
+  safeSendMessage<{ ok: boolean; snippets?: ReplySnippet[] }>({ type: "GET_REPLY_SNIPPETS" }).then((res) => {
+    if (!res?.ok || !res.snippets) {
+      listEl.innerHTML = `<div class="none">Chưa đăng nhập. Mở popup extension để đăng nhập.</div>`;
+      return;
+    }
+    const snippets = res.snippets;
+
+    function draw(q: string) {
+      const filtered = snippets.filter((s) => s.name.toLowerCase().includes(q.toLowerCase()));
+      if (!filtered.length) {
+        listEl.innerHTML = `<div class="none">Không có mẫu nào. Thêm trong trang quản lý.</div>`;
+        return;
+      }
+      listEl.innerHTML = filtered
+        .map(
+          (s) => `<div class="item" data-id="${esc(s.id)}">
+  <div class="name">${esc(s.name)}</div>
+  <div class="preview">${esc(s.content_html.replace(/<[^>]+>/g, " ").trim())}</div>
+</div>`,
+        )
+        .join("");
+
+      listEl.querySelectorAll<HTMLElement>(".item").forEach((el) => {
+        el.addEventListener("click", () => {
+          const snippet = filtered.find((s) => s.id === el.dataset.id)!;
+          insertSnippetHtml(body, snippet.content_html);
+          close();
+        });
+      });
+    }
+
+    draw("");
+    searchEl.addEventListener("input", () => draw(searchEl.value.trim()));
+  });
+}
+
 function scan() {
   findComposeDialogs().forEach(injectIcon);
+  findReplyBodies().forEach(injectReplyIcon);
 }
 
 scan();

@@ -29,6 +29,43 @@ export function getBodyEditable(dialog: HTMLElement) {
   );
 }
 
+// Inline reply boxes (replying within a thread) use the same editable-body
+// marker as the "New Message" compose body — confirmed via live DOM
+// inspection: g_editable="true" is present on both, while aria-label is
+// localized differently ("Message Body" vs "Nội dung thư" in Vietnamese)
+// and there's no subjectbox at all (the subject doesn't change on reply).
+// So: find every g_editable body on the page, and exclude whichever ones
+// already belong to a "New Message" compose dialog (those get the regular
+// icon via findComposeDialogs/injectIcon already).
+export function findReplyBodies(): HTMLElement[] {
+  const allBodies = Array.from(
+    document.querySelectorAll<HTMLElement>('div[contenteditable="true"][g_editable="true"]'),
+  );
+  const composeDialogs = findComposeDialogs();
+  return allBodies.filter((body) => !composeDialogs.some((dialog) => dialog.contains(body)));
+}
+
+// Inserts HTML at the current cursor position inside a contenteditable
+// body. execCommand is formally deprecated but still the simplest reliable
+// way to do a cursor-position insert into a contenteditable in Chrome —
+// this is the same mechanism most Gmail "canned response"-style extensions
+// rely on. Falls back to appending at the end if nothing is focused there.
+export function insertSnippetHtml(body: HTMLElement, html: string): boolean {
+  body.focus();
+  const selection = window.getSelection();
+  const hasCaretInBody = selection && selection.rangeCount > 0 && body.contains(selection.anchorNode);
+  if (!hasCaretInBody) {
+    const range = document.createRange();
+    range.selectNodeContents(body);
+    range.collapse(false);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  }
+  const ok = document.execCommand("insertHTML", false, html);
+  body.dispatchEvent(new InputEvent("input", { bubbles: true }));
+  return ok;
+}
+
 export type RecipientField = "To" | "Cc" | "Bcc";
 type RecipientEl = HTMLInputElement | HTMLTextAreaElement;
 
@@ -37,7 +74,24 @@ type RecipientEl = HTMLInputElement | HTMLTextAreaElement;
 // Gmail's own casing isn't consistent ("To recipients" vs "BCC recipients",
 // all-caps), so match case-insensitively (the trailing "i" flag) rather
 // than guessing the exact casing per field.
+//
+// aria-label is also localized to the account's Gmail UI language (seen
+// live: "To recipients" in English vs "Tới người nhận" in Vietnamese, same
+// account, different session) — the aria-label matchers below silently
+// fail whenever Gmail isn't in English. For "To" specifically there's a
+// locale-stable escape hatch: every recipient combobox (To/Cc/Bcc) carries
+// the same peoplekit-id="BbVjBd" regardless of language, and "To" is
+// always the first one present in the DOM (Cc/Bcc only exist once
+// revealed) — confirmed identical across both an English and a Vietnamese
+// capture. Cc/Bcc don't have an equivalent fix yet since peoplekit-id
+// doesn't distinguish between them; still English-only for now.
+const RECIPIENT_PEOPLEKIT_ID = "BbVjBd";
+
 export function getRecipientInput(dialog: HTMLElement, field: RecipientField): RecipientEl | null {
+  if (field === "To") {
+    const first = dialog.querySelector<HTMLInputElement>(`input[peoplekit-id="${RECIPIENT_PEOPLEKIT_ID}"]`);
+    if (first) return first;
+  }
   return (
     dialog.querySelector<HTMLInputElement>(`input[aria-label="${field} recipients" i]`) ??
     dialog.querySelector<HTMLTextAreaElement>(`textarea[aria-label="${field}" i]`) ??
@@ -214,6 +268,15 @@ export function fillBody(dialog: HTMLElement, bodyHtml: string) {
   body.dispatchEvent(new InputEvent("input", { bubbles: true }));
   return true;
 }
+
+// A synthetic (untrusted) DOM DragEvent does NOT work on Gmail — confirmed
+// by live testing: the data pipeline was correct (right file, right size)
+// and dispatching dragenter/dragover/drop on both the body and the whole
+// dialog threw no errors, but the file never showed up. Gmail's drop
+// handler appears to require a trusted event. File attachment is instead
+// done via chrome.debugger from the background worker — see
+// background/debuggerAttach.ts — which can dispatch a genuinely trusted
+// drag event through the DevTools protocol.
 
 // Confirmed via live Gmail DevTools inspection: <div role="button"
 // aria-label="Send ‪(Ctrl-Enter)‬">. A sibling "More send options" button

@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import Modal from "@/components/Modal";
 import RichTextEditor from "@/components/RichTextEditor";
+import TemplateAttachments from "@/components/TemplateAttachments";
+import AIComposeBox from "@/components/AIComposeBox";
 import type { Template, TemplateInput } from "@shared/types";
 
 const EMPTY: TemplateInput = { name: "", subject: "", body_html: "" };
@@ -148,6 +150,12 @@ export default function TemplatesPage() {
                 className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-600"
               />
             </div>
+            <AIComposeBox
+              hasExistingContent={!!form.subject.trim() || !!form.body_html.trim()}
+              onStart={() => setForm((f) => ({ ...f, subject: "", body_html: "" }))}
+              onSubject={(subject) => setForm((f) => ({ ...f, subject }))}
+              onBodyChunk={(chunk) => setForm((f) => ({ ...f, body_html: f.body_html + chunk }))}
+            />
             <div>
               <label className="text-xs font-medium text-gray-600">Tiêu đề email</label>
               <input
@@ -166,6 +174,11 @@ export default function TemplatesPage() {
                 />
               </div>
             </div>
+            {editing === "new" ? (
+              <p className="text-xs text-gray-400">Lưu template trước, rồi mở lại để đính kèm file.</p>
+            ) : (
+              editing && <TemplateAttachments templateId={editing.id} />
+            )}
             {error && <div className="text-sm text-red-600">{error}</div>}
             <button
               type="submit"

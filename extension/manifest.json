@@ -28,7 +28,7 @@
     }
   ],
   "host_permissions": ["https://mail.google.com/*", "https://*.supabase.co/*"],
-  "permissions": ["storage"],
+  "permissions": ["storage", "debugger", "downloads"],
   "web_accessible_resources": [
     {
       "resources": ["icons/icon48.png"],

@@ -91,14 +91,6 @@ export default function App() {
           >
             {submitting ? "Đang đăng nhập…" : "Đăng nhập"}
           </button>
-          <a
-            href={`${APP_URL}/login`}
-            target="_blank"
-            rel="noreferrer"
-            className="text-center text-xs text-gray-500 hover:text-gray-700"
-          >
-            Chưa có tài khoản? Tạo trên trang quản lý
-          </a>
         </form>
       )}
     </div>
