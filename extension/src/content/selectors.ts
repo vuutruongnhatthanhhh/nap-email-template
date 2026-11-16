@@ -278,15 +278,20 @@ export function fillBody(dialog: HTMLElement, bodyHtml: string) {
 // background/debuggerAttach.ts — which can dispatch a genuinely trusted
 // drag event through the DevTools protocol.
 
-// Confirmed via live Gmail DevTools inspection: <div role="button"
-// aria-label="Send ‪(Ctrl-Enter)‬">. A sibling "More send options" button
-// (the small dropdown arrow) also has role="button" but its aria-label
-// starts with "More", not "Send", so the prefix check tells them apart.
+// aria-label (e.g. "Send ‪(Ctrl-Enter)‬") is localized — confirmed live:
+// fails silently on a Vietnamese-language Gmail account ("Gửi" instead of
+// "Send"), the same failure mode as the "To" field earlier. jslog is
+// Google's internal analytics id for the element and doesn't change with
+// locale; the Send button's jslog starts with "32601" (confirmed via live
+// inspection), so match on that first and only fall back to the
+// English-only aria-label check as a last resort.
 export function getSendButton(dialog: HTMLElement): HTMLElement | null {
   return (
+    dialog.querySelector<HTMLElement>('div[role="button"][jslog^="32601;"]') ??
     Array.from(dialog.querySelectorAll<HTMLElement>('div[role="button"]')).find((el) =>
       (el.getAttribute("aria-label") ?? "").trim().toLowerCase().startsWith("send"),
-    ) ?? null
+    ) ??
+    null
   );
 }
 
