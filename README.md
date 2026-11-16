@@ -13,7 +13,7 @@ shared/      Type dùng chung giữa extension và web
 supabase/    migrations/*.sql — chạy lần lượt trong Supabase SQL editor
 ```
 
-## 1. Thiết lập Supabase
+## 1. Thiết lập Supabase.
 
 1. Tạo project tại [supabase.com](https://supabase.com).
 2. Mở **SQL Editor**, chạy lần lượt từng file trong
@@ -94,7 +94,7 @@ phải đi đường này: Gmail chặn mọi sự kiện kéo-thả do script t
 protocol mới tạo được sự kiện ở tầng trình duyệt mà Gmail chấp nhận.
 
 **Đánh đổi**: mỗi lần attach file, Chrome sẽ hiện **banner vàng** báo
-*"[tên extension] đang debug trình duyệt này"* trong vài giây (tới khi
+_"[tên extension] đang debug trình duyệt này"_ trong vài giây (tới khi
 debugger detach xong). Đây là hành vi mặc định của Chrome khi bất kỳ
 extension nào dùng quyền `debugger`, không che giấu được. Nếu không có
 file đính kèm, bước này được bỏ qua hoàn toàn, không có banner nào cả.
@@ -126,6 +126,7 @@ Chrome → `chrome://extensions` → bật **Developer mode** → **Load unpacke
 đã dùng ở trang quản lý.
 
 Khi dùng: mở Gmail, bấm **Soạn thư**, sẽ thấy icon nhỏ cạnh ô Tiêu đề:
+
 - **Điền nhanh** — chọn 1 người nhận → tự điền To, Tiêu đề, Nội dung (thay
   `{{name}}`, `{{email}}`, `{{company}}` theo người đó).
 - **Gửi hàng loạt (Bcc)** — chọn 1 template → tick những người nhận dùng
