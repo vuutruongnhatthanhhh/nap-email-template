@@ -13,7 +13,7 @@ shared/      Type dùng chung giữa extension và web
 supabase/    migrations/*.sql — chạy lần lượt trong Supabase SQL editor
 ```
 
-## 1. Thiết lập Supabase.
+## 1. Thiết lập Supabase.,
 
 1. Tạo project tại [supabase.com](https://supabase.com).
 2. Mở **SQL Editor**, chạy lần lượt từng file trong
