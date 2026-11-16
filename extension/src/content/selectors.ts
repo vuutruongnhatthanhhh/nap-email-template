@@ -325,12 +325,14 @@ export function getComposeButton(): HTMLElement | null {
 export async function openNewComposeDialog(): Promise<HTMLElement | null> {
   const before = new Set(findComposeDialogs());
   const btn = getComposeButton();
+  console.log("[nap-email-template] openNewComposeDialog: compose button found:", btn, "existing dialogs:", before.size);
   if (!btn) return null;
 
   const pollForFresh = async () => {
     for (let i = 0; i < 20; i++) {
       await wait(150);
-      const fresh = findComposeDialogs().find((d) => !before.has(d) && getSubjectInput(d));
+      const all = findComposeDialogs();
+      const fresh = all.find((d) => !before.has(d) && getSubjectInput(d));
       if (fresh) return fresh;
     }
     return null;
@@ -338,12 +340,16 @@ export async function openNewComposeDialog(): Promise<HTMLElement | null> {
 
   btn.click();
   let dialog = await pollForFresh();
+  console.log("[nap-email-template] openNewComposeDialog: after plain click:", dialog, "all dialogs now:", findComposeDialogs().length);
   if (dialog) return dialog;
 
   dispatchFullClick(btn);
   dialog = await pollForFresh();
+  console.log("[nap-email-template] openNewComposeDialog: after full mouse click:", dialog, "all dialogs now:", findComposeDialogs().length);
   if (dialog) return dialog;
 
   dispatchEnterActivate(btn);
-  return pollForFresh();
+  dialog = await pollForFresh();
+  console.log("[nap-email-template] openNewComposeDialog: after Enter activate:", dialog, "all dialogs now:", findComposeDialogs().length);
+  return dialog;
 }

@@ -3,6 +3,21 @@ import type { TemplateAttachment } from "@shared/types";
 
 const BUCKET = "template-attachments";
 
+// Supabase Storage rejects object keys containing accented characters (so
+// Vietnamese filenames with dấu fail with "Invalid key") — strip diacritics
+// and anything else unsafe for the *storage path only*. The original,
+// accented name is kept as-is in `file_name` for display/download.
+const COMBINING_MARKS = /[̀-ͯ]/g;
+
+function sanitizeForStorageKey(name: string): string {
+  // "đ"/"Đ" aren't decomposable via NFD (they're their own base letters, not
+  // "d" + a diacritic mark), so they'd otherwise just vanish below.
+  const withoutDStroke = name.replace(/đ/g, "d").replace(/Đ/g, "D");
+  const stripped = withoutDStroke.normalize("NFD").replace(COMBINING_MARKS, "");
+  const safe = stripped.replace(/[^a-zA-Z0-9._-]+/g, "_").replace(/_+/g, "_");
+  return safe.slice(0, 150) || "file";
+}
+
 export async function listAttachments(templateId: string): Promise<TemplateAttachment[]> {
   const { data, error } = await supabase
     .from("template_attachments")
@@ -19,7 +34,7 @@ export async function uploadAttachment(templateId: string, file: File): Promise<
   } = await supabase.auth.getUser();
   if (!user) throw new Error("NOT_AUTHENTICATED");
 
-  const path = `${user.id}/${templateId}/${crypto.randomUUID()}-${file.name}`;
+  const path = `${user.id}/${templateId}/${crypto.randomUUID()}-${sanitizeForStorageKey(file.name)}`;
   const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, file, {
     contentType: file.type || "application/octet-stream",
   });
