@@ -311,11 +311,16 @@ export async function clickSend(dialog: HTMLElement): Promise<boolean> {
   return !stillOpen();
 }
 
-// Confirmed via live Gmail DevTools inspection: <div role="button" gh="cm">
-// — "gh" (go-to handler) "cm" (compose mail) is one of Gmail's oldest,
-// most stable hooks, predating aria-label-based attributes.
+// <div role="button" gh="cm"> is the textbook Gmail compose-button hook,
+// but confirmed via live inspection that `gh="cm"` isn't always present on
+// the exact same button (same class/jsaction/jslog, attribute just
+// missing) — fall back to the class signature, which stayed identical
+// across both captures.
 export function getComposeButton(): HTMLElement | null {
-  return document.querySelector<HTMLElement>('div[gh="cm"]');
+  return (
+    document.querySelector<HTMLElement>('div[gh="cm"]') ??
+    document.querySelector<HTMLElement>('div.T-I.T-I-KE.L3[role="button"]')
+  );
 }
 
 // Opens a brand new compose window and waits for it to be ready to fill
