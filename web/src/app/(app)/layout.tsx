@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { GUIDE_URL } from "@shared/constants";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -70,6 +71,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </nav>
           </div>
           <div className="flex items-center gap-3">
+            <a
+              href={GUIDE_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs font-medium text-blue-600 hover:text-blue-800"
+            >
+              Hướng dẫn sử dụng
+            </a>
             <span className="text-xs text-gray-500">{email}</span>
             <button
               onClick={() => supabase.auth.signOut()}

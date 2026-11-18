@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { GUIDE_URL } from "@shared/constants";
 
 const APP_URL = (import.meta.env.NEXT_PUBLIC_APP_URL as string) || "http://localhost:3000";
 
@@ -43,7 +44,15 @@ export default function App() {
     <div className="p-4 flex flex-col gap-3">
       <div className="flex items-center gap-2">
         <img src="/icons/icon48.png" className="w-6 h-6" alt="" />
-        <span className="font-semibold text-sm">Nạp Email Template</span>
+        <span className="font-semibold text-sm flex-1">Nạp Email Template</span>
+        <a
+          href={GUIDE_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="text-xs font-medium text-brand hover:text-brand-hover"
+        >
+          Hướng dẫn
+        </a>
       </div>
 
       {email ? (
